@@ -9,8 +9,14 @@ from world import MAX_STEPS, ROCK, Cell
 
 ROOT = Path(__file__).parent.parent
 TRACES = ROOT / "data" / "traces.txt"
+REQUIREMENTS = ROOT / "docs" / "requirements.md"
 CASE = re.compile(r"^=== case \d+ ===$")
 CALL = re.compile(r"^\[\d+\] (\w+) -> (.*)$")
+REQ_ROW = re.compile(r"^\| (R\d) ([^|]+?) \| ([^|]+?) \| ([^|]+?) \|")
+# Requirements each tab shows evidence of; R6 and R7 are not in the viewer.
+TAB_REQUIREMENTS = {"Map": ["R1"], "Route": ["R1", "R2"], "Policy": ["R2"],
+                    "Learning": ["R3"], "Agent": ["R4", "R5"]}
+NOT_SHOWN = ["R6", "R7"]
 
 
 def record_route(start: Cell, letter: str) -> dict:
@@ -74,6 +80,26 @@ def parse_traces(text: str) -> list[dict]:
     return cases
 
 
+def parse_requirements(text: str) -> dict[str, dict]:
+    """R1-R7 from the table of docs/requirements.md: name, demand, where."""
+    requirements = {}
+    for line in text.splitlines():
+        match = REQ_ROW.match(line)
+        if not match:
+            continue
+        rid, name, demands, where = match.groups()
+        tokens = re.findall(r"`([^`]+)`", where)
+        refs = [token for token in tokens if "::" in token]
+        files = []
+        for token in tokens:
+            path = token.split("::")[0]
+            if (ROOT / path).exists() and path not in files:
+                files.append(path)
+        requirements[rid] = {"id": rid, "name": name,
+                             "demands": demands.replace("`", ""),
+                             "files": files, "refs": refs}
+    return requirements
+
 def build_data() -> dict:
     cells = [(r, c) for r in range(world.rows) for c in range(world.cols)]
     places = {letter: {"cell": list(cell), "name": NAMES[letter]}
@@ -86,6 +112,12 @@ def build_data() -> dict:
                "gamma": gamma, "episodes": episodes,
                "rates": curve(alpha, gamma)} for alpha, gamma in CONFIGS]
     text = TRACES.read_text(encoding="utf-8")
+    requirements = parse_requirements(
+        REQUIREMENTS.read_text(encoding="utf-8"))
+    used = [rid for ids in TAB_REQUIREMENTS.values() for rid in ids]
+    missing = sorted(set(used + NOT_SHOWN) - set(requirements))
+    if missing:
+        raise ValueError(f"not in docs/requirements.md: {missing}")
     return {
         "world": {"rows": world.rows, "cols": world.cols,
                   "symbols": world.grid, "heights": world.heights,
@@ -96,6 +128,9 @@ def build_data() -> dict:
         "policy": {letter: policy_of(letter) for letter in world.places},
         "curves": curves,
         "traces": parse_traces(text),
+        "requirements": requirements,
+        "tab_requirements": TAB_REQUIREMENTS,
+        "not_shown": NOT_SHOWN,
     }
 
 
@@ -128,8 +163,26 @@ grid-template-columns:220px 1fr;grid-template-rows:auto 1fr auto}
 aside{grid-row:1/3;background:var(--panel);padding:16px;overflow:auto;
 border-right:1px solid var(--line)}
 aside h1{font-size:18px;margin:0;color:var(--sand)}
-aside h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;
-color:var(--muted);margin:18px 0 6px}
+aside h2{font-size:15px;color:var(--sand);margin:22px 0 2px;
+padding-bottom:4px;border-bottom:1px solid var(--line)}
+aside h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;
+color:var(--muted);margin:14px 0 6px}
+.icon{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:13px}
+.reqs{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;
+margin-bottom:12px;font-size:12px}
+.reqs>span{color:var(--muted);padding-top:4px}
+details.req{background:#2a1d17;border:1px solid #5a3a28;border-radius:6px;
+padding:3px 9px;max-width:560px}
+details.req[open]{border-color:var(--sand)}
+.req summary{cursor:pointer}
+.req summary:focus-visible{outline:2px solid var(--sand);outline-offset:2px}
+.req summary b{color:var(--sand)}
+.req .files{color:var(--muted);font:11px ui-monospace,Menlo,monospace}
+.req p{margin:6px 0 2px}
+.req code{display:block;font-size:11px}
+.out{font-size:12px;margin:6px 0}
+.out b{color:var(--sand)}
+.icon svg{width:28px;height:28px;flex:none;border-radius:4px}
 nav{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid
 var(--line)}
 main{overflow:auto;padding:16px 20px}
@@ -195,6 +248,9 @@ th{color:var(--muted);font-weight:600}
 .call{margin:4px 0}
 code{font:12px ui-monospace,Menlo,monospace;color:var(--muted)}
 pre{white-space:pre-wrap;font:inherit;margin:4px 0 0}
+pre strong{color:var(--sand)}
+code.inline{color:var(--ink);background:#2e211b;border-radius:4px;
+padding:1px 5px}
 input{font:inherit;color:var(--ink);background:#2e211b;width:560px;
 border:1px solid var(--line);border-radius:6px;padding:5px 10px}
 input:focus-visible{outline:2px solid var(--sand)}
@@ -206,13 +262,31 @@ input:focus-visible{outline:2px solid var(--sand)}
 <aside>
 <h1>Planetary rover</h1>
 <div class="muted">Mars grid, Q table and agent</div>
-<h2>Places</h2><div id="places"></div>
-<h2>Height</h2><div class="legend" id="legend"></div>
+<h2>Legend</h2>
+<h3>Places</h3><div id="places"></div>
+<h3>Height</h3><div class="legend" id="legend"></div>
 <div class="muted" style="font-size:12px">low (dark) to high (sand)</div>
-<h2>Terrain</h2>
-<div class="muted" style="font-size:12px">Hatched grey: rock.<br>
-Black circle with ring: crater.</div>
+<h3>Terrain</h3><div id="terrain"></div>
+<h2>Requirements</h2>
+<div class="muted" style="font-size:12px">Each tab lists the requirements
+it shows. Not shown in the viewer:</div>
+<div id="notshown"></div>
 </aside>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+<linearGradient id="g-rock" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#b3aaa0"/><stop offset=".45"
+stop-color="#7a716a"/><stop offset="1" stop-color="#3d3733"/>
+</linearGradient>
+<radialGradient id="g-bowl" cx=".42" cy=".4" r=".7" fx=".3" fy=".25">
+<stop offset="0" stop-color="#0d0805"/><stop offset=".55"
+stop-color="#2b1a10"/><stop offset="1" stop-color="#8a6240"/>
+</radialGradient>
+<radialGradient id="g-rim" cx=".5" cy=".5" r=".5">
+<stop offset=".7" stop-color="#8f6a47"/><stop offset=".9"
+stop-color="#c9a27a"/><stop offset="1" stop-color="#6b4a30"/>
+</radialGradient>
+</defs></svg>
 <nav>
 <button id="b-Map">Map</button>
 <button id="b-Route">Route</button>
@@ -229,7 +303,7 @@ and state number.</div></div>
 </section>
 <section id="tab-Route" hidden>
 <div class="bar dests"></div>
-<div class="bar"><button id="play">Play</button>
+<div class="bar"><button id="play">Run</button>
 <button id="pause">Pause</button><button id="next">Step</button>
 <button id="back">Back</button><button id="reset">Reset</button>
 <label class="muted">Speed <select id="speed">
@@ -315,25 +389,53 @@ function mix(lo, hi, t) {
 const HMAX = 9;  // heights are the digits 0-9
 const hcol = v => mix([59, 36, 22], [236, 217, 176], v / HMAX);
 
+const ROCK_GROUND = '#3a312b';
+function rock(g) {  // a boulder with facets, a cast shadow and a pebble
+  const k = s('g', {transform: `scale(${C / 50})`});
+  k.append(
+    s('ellipse', {cx: 26, cy: 42, rx: 19, ry: 4.5, fill: 'rgba(0,0,0,.45)'}),
+    s('polygon', {points: '8,38 6,27 12,16 24,9 36,11 45,22 44,35 34,41 18,42',
+      fill: 'url(#g-rock)', stroke: '#221d1a', 'stroke-width': 1.5,
+      'stroke-linejoin': 'round'}),
+    s('path', {d: 'M12 16 L23 23 L24 9 M23 23 L31 28 L45 22 M31 28 L34 41'
+      + ' M23 23 L16 34', fill: 'none', stroke: 'rgba(0,0,0,.35)',
+      'stroke-width': 1.2}),
+    s('path', {d: 'M7 27 L12 16 L24 9 L36 11', fill: 'none',
+      stroke: 'rgba(255,255,255,.35)', 'stroke-width': 1.5}),
+    s('ellipse', {cx: 43, cy: 43, rx: 4, ry: 2.8, fill: '#857c74',
+      stroke: '#2a2421'}),
+    s('ellipse', {cx: 8, cy: 43, rx: 2.5, ry: 1.8, fill: '#6f665f'}));
+  g.append(k);
+}
+function crater(g) {  // ejecta, a lit rim and a shaded bowl
+  const k = s('g', {transform: `scale(${C / 50})`});
+  k.append(s('ellipse', {cx: 25, cy: 26, rx: 20, ry: 17,
+    fill: 'rgba(60,35,20,.4)'}));
+  [[6, 14], [44, 13], [45, 38], [7, 40], [17, 6], [36, 46], [3, 27]]
+    .forEach(([x, y]) => k.append(s('circle', {cx: x, cy: y, r: 1.5,
+      fill: '#4a3020'})));
+  k.append(
+    s('ellipse', {cx: 25, cy: 26, rx: 16, ry: 13.5, fill: 'url(#g-rim)'}),
+    s('ellipse', {cx: 25, cy: 26.5, rx: 12, ry: 10, fill: 'url(#g-bowl)'}),
+    s('path', {d: 'M14 29 A12 10 0 0 0 36 29', fill: 'none',
+      stroke: 'rgba(255,225,180,.5)', 'stroke-width': 1.5}),
+    s('path', {d: 'M12 25 A13 11 0 0 1 35 17', fill: 'none',
+      stroke: 'rgba(0,0,0,.45)', 'stroke-width': 2}));
+  g.append(k);
+}
+
 function grid(svg, o) {
   svg.replaceChildren();
   svg.setAttribute('viewBox', `0 0 ${W.cols * C} ${W.rows * C}`);
-  const id = svg.id + '-rock', defs = s('defs');
-  const pat = s('pattern', {id, width: 8, height: 8,
-    patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'});
-  pat.append(s('rect', {width: 8, height: 8, fill: '#4b4643'}),
-    s('line', {x1: 0, y1: 0, x2: 0, y2: 8, stroke: '#2b2826',
-               'stroke-width': 3}));
-  defs.append(pat); svg.append(defs);
   for (let r = 0; r < W.rows; r++) for (let c = 0; c < W.cols; c++) {
     const k = sym(r, c), hgt = W.heights[r][c];
     const g = s('g', {transform: `translate(${c * C},${r * C})`});
-    const fill = k === '#' ? `url(#${id})`
+    const fill = k === '#' ? ROCK_GROUND
       : (o.fill ? o.fill(r, c) : hcol(hgt));
     g.append(s('rect', {x: 1, y: 1, width: C - 2, height: C - 2, rx: 4,
                         fill}));
-    if (k === '~') g.append(s('circle', {cx: C / 2, cy: C / 2, r: 14,
-      fill: '#0a0706', stroke: '#9a6a48', 'stroke-width': 3}));
+    if (k === '#') rock(g);
+    if (k === '~') crater(g);
     if (k !== '#') g.append(s('text', {x: 4, y: 12, class: 'hn'}, hgt));
     if (W.places[k]) g.append(
       s('circle', {cx: C / 2, cy: C / 2, r: 12, class: 'pb'}),
@@ -496,8 +598,19 @@ function caseCard(t, title) {
   t.trace.forEach(x => { const d = h('div', 'call');
     d.append(h('span', 'badge', x.tool), h('code', null, x.result));
     card.append(d); });
-  card.append(h('div', 'muted', 'Answer'), h('pre', null, t.answer));
+  card.append(h('div', 'muted', 'Answer'), markdown(t.answer));
   return card;
+}
+function markdown(text) {  // **bold** and `code`; everything else as text
+  const out = h('pre');
+  text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/).forEach(part => {
+    if (/^\*\*[^*]+\*\*$/.test(part))
+      out.append(h('strong', null, part.slice(2, -2)));
+    else if (/^`[^`]+`$/.test(part))
+      out.append(h('code', 'inline', part.slice(1, -1)));
+    else if (part) out.append(part);
+  });
+  return out;
 }
 function renderAgent() {
   $('cases').replaceChildren(...D.traces.map((t, i) =>
@@ -593,6 +706,37 @@ $('places').replaceChildren(...L.map(d => { const p = h('div', 'place');
 $('legend').replaceChildren(...Array.from({length: HMAX + 1},
   (_, v) => { const e = h('span', null, v);
     e.style.background = hcol(v); return e; }));
+function reqBadge(id) {  // name and files; open it for demand and refs
+  const r = D.requirements[id], d = h('details', 'req'), sm = h('summary');
+  sm.append(h('b', null, `${r.id} ${r.name}`), ' ',
+    h('span', 'files', r.files.join(', ')));
+  d.append(sm, h('p', null, 'Demands: ' + r.demands));
+  if (r.refs.length) d.append(h('p', 'muted', 'Met in:'),
+    ...r.refs.map(ref => h('code', null, ref)));
+  return d;
+}
+TABS.forEach(t => {
+  const strip = h('div', 'reqs');
+  strip.append(h('span', null, 'Requirements shown here:'),
+    ...D.tab_requirements[t].map(reqBadge));
+  $('tab-' + t).prepend(strip);
+});
+$('notshown').replaceChildren(...D.not_shown.map(id => {
+  const r = D.requirements[id], d = h('div', 'out');
+  d.append(h('b', null, `${r.id} ${r.name}`), h('br'),
+    h('span', 'muted', r.files.join(', ')));
+  return d;
+}));
+$('terrain').replaceChildren(...[
+  [ROCK_GROUND, rock, 'Rock: obstacle, blocks the move'],
+  [hcol(1), crater, 'Crater: hazard, -50 and end'],
+].map(([ground, draw, text]) => {
+  const row = h('div', 'icon'), svg = s('svg', {viewBox: `0 0 ${C} ${C}`});
+  const g = s('g');
+  g.append(s('rect', {width: C, height: C, rx: 4, fill: ground}));
+  draw(g); svg.append(g); row.append(svg, h('span', null, text));
+  return row;
+}));
 $('m-saved').onclick = () => setMode(false);
 $('m-live').onclick = () => setMode(true);
 $('ask').onsubmit = send;

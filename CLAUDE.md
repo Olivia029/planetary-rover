@@ -42,8 +42,8 @@ Read the file before the work that needs it; do not load it otherwise.
 - **Run** from the project root: `uv run python src/<module>.py`; tests with
   `uv run pytest`. Plain imports (`from world import World`).
 - **Machine**: macOS on Apple Silicon; `.DS_Store` is git-ignored.
-- **LLM**: local Ollama, model `qwen3:4b`, used only by `src/llm.py`.
-  Everything else, tests included, works offline with no token.
+- **LLM**: local Ollama, model `qwen3:4b`, used by `src/llm.py` and checked by
+  `src/serve.py`. Everything else, tests included, works offline with no token.
 
 ## Structure
 

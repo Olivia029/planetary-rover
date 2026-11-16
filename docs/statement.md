@@ -1,8 +1,6 @@
 # Statement of the practice (summary written by the student)
 
-Source of the requirements R1-R7 and of the common rules of the themes. It is
-the student's own English summary of the course statement; the examples of the
-office theme are left out. Claude Code reads it, never changes it.
+Source of the requirements R1-R7 and of the common rules of the themes. Claude Code reads it, never changes it.
 
 ## Common rules of the themes
 
