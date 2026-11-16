@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "ask": [
+      "Edit",
+      "Write"
+    ],
+    "deny": [
+      "Edit(CLAUDE.md)",
+      "Edit(.claude/**)",
+      "Edit(worklog.md)",
+      "Edit(data/**)",
+      "Edit(docs/rules.md)",
+      "Edit(docs/contracts.md)",
+      "Edit(docs/viewer.md)",
+      "Edit(docs/statement.md)",
+      "Write(CLAUDE.md)",
+      "Write(.claude/**)",
+      "Write(worklog.md)",
+      "Write(data/**)",
+      "Write(docs/rules.md)",
+      "Write(docs/contracts.md)",
+      "Write(docs/viewer.md)",
+      "Write(docs/statement.md)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}
